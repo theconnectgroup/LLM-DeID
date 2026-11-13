@@ -48,6 +48,11 @@ For a chunk you already have in front of you, paste it into the **Paste text**
 panel and press **De-identify** there. Nothing is written to disk, and the
 de-identified text stays on that panel until you copy it.
 
+That panel works in both directions. Paste an answer that contains tokens and
+**Re-identify** appears beside De-identify; it swaps them back from this session's
+map and tells you how many resolved. Tokens it has never seen are left alone and
+counted, so an unresolved token is never passed off as a real value.
+
 Read `_secrets.csv` before anything leaves the machine. It records the rule, the
 line and the length of anything that looked like a credential, never the value.
 If something is listed, rotate it. A secret sitting in a client file is a finding,
@@ -55,7 +60,8 @@ not a redaction problem.
 
 Attach the `.llm.md` files to the model. Not the originals, and not the map.
 
-Paste the answer into the Restore panel to put the real values back.
+Put the real values back either way: **Re-identify** on the paste panel, or the
+Restore panel at the bottom. Both read this session's map.
 
 ## Formats
 
