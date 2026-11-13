@@ -1,0 +1,51 @@
+{
+  "name": "llm-deid",
+  "version": "1.0.1",
+  "private": true,
+  "description": "De-identify client files before they reach an LLM",
+  "author": { "name": "The Connect Group" },
+  "license": "Apache-2.0",
+  "main": "main.js",
+  "scripts": {
+    "setup": "npm install --save-dev electron",
+    "extras": "npm install --save @kenjiuno/msgreader xlsx pdfjs-dist word-extractor",
+    "start": "electron .",
+    "test": "node test/run.js",
+    "notices": "node scripts/notices.js",
+    "build": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "ai.synthreo.llmdeid",
+    "productName": "LLM DeID",
+    "copyright": "Copyright © 2026 The Connect Group",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": ["LICENSE", "NOTICE"],
+    "win": {
+      "target": "nsis",
+      "artifactName": "${productName} Setup.${ext}",
+      "icon": "assets/icon-1024.png",
+      "signAndEditExecutable": true,
+      "signtoolOptions": {
+        "certificateSha1": "2C480E989B005B8F322126F046D9A66A6BF48614",
+        "signingHashAlgorithms": ["sha256"],
+        "rfc3161TimeStampServer": "http://ts.ssl.com"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0"
+  }
+}
