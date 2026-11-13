@@ -8,7 +8,7 @@ const KEEP_HOSTS = [
   'windowsupdate.com', 'azure.com', 'azurewebsites.net', 'github.com', 'githubusercontent.com',
   'google.com', 'apple.com', 'adobe.com', 'mozilla.org', 'amazonaws.com', 'cloudflare.com',
   'mimecast.com', 'proofpoint.com', 'knowbe4.com', 'duo.com', 'okta.com', 'cisco.com',
-  'fortinet.com', 'veeam.com', 'connectwise.com', 'ninjaone.com', 'datto.com', 'synthreo.ai',
+  'fortinet.com', 'veeam.com', 'connectwise.com', 'ninjaone.com', 'datto.com',
   'powershell.org', 'nuget.org', 'python.org'
 ];
 
