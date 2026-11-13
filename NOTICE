@@ -1,0 +1,8 @@
+LLM DeID
+Copyright 2026 The Connect Group
+
+This product includes the following third-party software:
+
+electron 45.3.1 — MIT
+  https://github.com/electron/electron
+  Electron bundles Chromium and Node.js. Their notices ship inside the application as LICENSE.electron.txt and LICENSES.chromium.html.

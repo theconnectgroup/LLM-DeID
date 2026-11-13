@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
+<title>LLM DeID</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>LLM DeID</h1>
+    <p class="sub">De-identify client files before they reach an LLM. Files are read here and nowhere else &mdash; nothing is uploaded.</p>
+  </div>
+  <div class="header-right">
+    <label class="theme-pick">
+      <select id="theme-select" aria-label="Colour theme">
+        <option value="midnight">Midnight</option>
+        <option value="iris">Iris</option>
+        <option value="daylight">Daylight</option>
+      </select>
+    </label>
+    <span class="ver" id="app-version"></span>
+    <div class="badge" id="engine-badge">ready</div>
+  </div>
+</header>
+
+<main>
+  <div class="work">
+    <div class="col">
+      <section class="panel" id="drop-panel">
+        <div id="dropzone" class="dropzone">
+          <div class="dz-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>
+            </svg>
+          </div>
+          <p><strong>Drop files or a folder here</strong></p>
+          <p class="muted">Word, Excel, PowerPoint, PDF, Outlook, text, scripts</p>
+          <div class="row">
+            <button type="button" id="btn-files" class="secondary">Add files</button>
+            <button type="button" id="btn-folder" class="secondary">Add folder</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="files-panel" hidden>
+        <div class="panel-head">
+          <h2>Files <span class="count" id="file-count">0</span></h2>
+          <button type="button" id="btn-clear" class="ghost">Clear</button>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+      </section>
+    </div>
+
+    <section class="panel" id="options-panel">
+      <h2>What gets replaced<span class="tip" tabindex="0" role="note">i<span class="bubble">Emails, phone numbers, SSNs and EINs, card numbers, IPs, hostnames and credentials are caught automatically. Names and organisations are not &mdash; those come from the list below.</span></span></h2>
+      <div class="opt-stack">
+        <label class="field">
+          <span>Names, organisations and hosts<span class="tip" tabindex="0" role="note">i<span class="bubble">One per line: person: for a human, org: for a company, host: for a device or server. Anything you do not list here is not caught. A CSV with Type,Name columns loads straight in.</span></span></span>
+          <textarea id="dict" rows="6" spellcheck="false" placeholder="person: Jane Doe&#10;org: Bridger Aerospace&#10;host: PC-NAME-01"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" id="btn-dict-csv" class="ghost">Load CSV&hellip;</button>
+          <button type="button" id="btn-dict-template" class="ghost">Save template</button>
+        </div>
+        <label class="field">
+          <span>Leave these exactly as written<span class="tip" tabindex="0" role="note">i<span class="bubble">Words the tool must not touch &mdash; product names, versions. Comma separated.</span></span></span>
+          <input id="keeplist" type="text" spellcheck="false" placeholder="Windows 11, Microsoft 365">
+        </label>
+        <label class="check">
+          <input type="checkbox" id="keepip"><span>Leave internal IP addresses alone</span>
+        </label>
+        <label class="field">
+          <span>Output format<span class="tip" tabindex="0" role="note">i<span class="bubble">Markdown reads best in a chat window; plain text pastes anywhere; JSON is for a tool that parses it.</span></span></span>
+          <select id="opt-format">
+            <option value="md">Markdown (.md)</option>
+            <option value="txt">Plain text (.txt)</option>
+            <option value="json">JSON (.json)</option>
+          </select>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="opt-combine"><span>Combine everything into one file</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="opt-report" checked><span>Write the CSV report alongside the copies</span>
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <section class="actions">
+    <button type="button" id="btn-run" class="primary" disabled>De-identify</button>
+    <span id="status" class="muted"></span>
+  </section>
+
+  <section class="panel" id="results-panel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2>Results<span class="tip" tabindex="0" role="note">i<span class="bubble">One copy per input, in the format you picked, named after the source file. redaction-map.json is written beside it so Restore works. Filenames keep the input name unredacted &mdash; if that name identifies the client, rename the file before uploading, or use Copy, which sends only the de-identified text.</span></span></h2>
+      </div>
+      <div class="row" style="margin-top:0">
+        <button type="button" id="btn-copy-all" class="secondary" hidden>Copy all</button>
+        <button type="button" id="btn-save" class="secondary">Save to folder&hellip;</button>
+      </div>
+    </div>
+    <div class="save-note" id="save-note" hidden></div>
+    <div class="tally-row">
+      <div class="tally" id="tally"></div>
+      <span class="tip" tabindex="0" role="note">i<span class="bubble">A token is a stand-in such as [EMAIL_01]. The same value always gets the same token, so the model can follow the story without ever seeing the real one.</span></span>
+    </div>
+    <ul id="results" class="results"></ul>
+  </section>
+
+  <section class="panel" id="restore-panel">
+    <details>
+      <summary>Put the real values back into an answer</summary>
+      <p class="muted">Paste what the model wrote. Tokens are swapped back using the map from this session.</p>
+      <textarea id="restore-in" rows="5" spellcheck="false" placeholder="The user [NAME_01] reported that [HOST_02] is down&hellip;"></textarea>
+      <div class="row">
+        <button type="button" id="btn-restore" class="secondary">Restore</button>
+        <button type="button" id="btn-copy-restored" class="ghost" hidden>Copy</button>
+      </div>
+      <textarea id="restore-out" rows="5" readonly hidden></textarea>
+    </details>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
