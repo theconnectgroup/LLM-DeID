@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('deid', {
   loadDictionaryCsv: () => ipcRenderer.invoke('dictionary-csv'),
   saveDictionaryTemplate: () => ipcRenderer.invoke('dictionary-template'),
   appVersion: () => ipcRenderer.invoke('app-version'),
+  tokenizeText: (text, options) => ipcRenderer.invoke('tokenize-text', text, options),
+  saveMap: (map) => ipcRenderer.invoke('save-map', map),
+  sessionInfo: () => ipcRenderer.invoke('session-info'),
+  forgetSession: () => ipcRenderer.invoke('forget-session'),
   restore: (text, map) => ipcRenderer.invoke('restore', text, map),
   openFolder: (dir) => ipcRenderer.invoke('open-folder', dir),
   onProgress: (cb) => {

@@ -95,7 +95,8 @@ function formatPayload(format, d) {
 async function processFiles(paths, options, onProgress) {
   const opts = options || {};
   const outFormat = normaliseFormat(opts.outputFormat);
-  const engine = createEngine({
+  // A caller can hand in a live engine so tokens stay stable across runs.
+  const engine = opts.engine || createEngine({
     dictionary: opts.dictionary || [],
     keepList: opts.keepList || [],
     keepPrivateIps: !!opts.keepPrivateIps
@@ -103,6 +104,9 @@ async function processFiles(paths, options, onProgress) {
 
   const items = [];
   const usedNames = new Map();
+  // Secrets accumulate on the engine for its whole life, so a batch reports only
+  // what it added - otherwise every later _secrets.csv repeats the earlier ones.
+  const secretStart = engine.secrets.length;
 
   for (let i = 0; i < paths.length; i++) {
     const full = paths[i];
@@ -196,9 +200,18 @@ async function processFiles(paths, options, onProgress) {
     ].map(csvCell).join(',')))
     .join('\n');
 
+  const batchSecrets = engine.secrets.slice(secretStart);
   const secretsCsv = ['rule,length,context,line']
-    .concat(engine.secrets.map((s) => [s.rule, s.length, s.context, s.line].map(csvCell).join(',')))
+    .concat(batchSecrets.map((s) => [s.rule, s.length, s.context, s.line].map(csvCell).join(',')))
     .join('\n');
+
+  // Distinct tokens present in this batch's payloads, not the whole session -
+  // the session count would inflate the tally on every run after the first.
+  const batchTokens = new Set();
+  for (const it of items) {
+    if (!it.payload) continue;
+    for (const m of it.payload.matchAll(/\[[A-Z]+_\d{2,4}\]/g)) batchTokens.add(m[0]);
+  }
 
   return {
     items,
@@ -208,8 +221,9 @@ async function processFiles(paths, options, onProgress) {
     reportCsv,
     secretsCsv,
     map: engine.toJSON(),
-    tokenCount: engine.tokenCount,
-    secretCount: engine.secrets.length
+    tokenCount: batchTokens.size,
+    sessionTokenCount: engine.tokenCount,
+    secretCount: batchSecrets.length
   };
 }
 

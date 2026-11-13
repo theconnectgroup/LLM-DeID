@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-const { processFiles, EXTENSIONS, safeName } = require('./src/engine');
+const { processFiles, EXTENSIONS, safeName, countTokens } = require('./src/engine');
 const { createEngine } = require('./src/redact');
 
 const FILTERS = [
@@ -12,6 +12,35 @@ const FILTERS = [
 ];
 
 let win = null;
+
+// One engine for the life of the process. Tokens stay stable across pastes and
+// file batches, and the map lives in memory until the user saves it - closing
+// the app is what discards it.
+let sessionEngine = null;
+let sessionSig = '';
+
+function engineFor(options) {
+  const opts = {
+    dictionary: (options && options.dictionary) || [],
+    keepList: (options && options.keepList) || [],
+    keepPrivateIps: !!(options && options.keepPrivateIps)
+  };
+  const sig = JSON.stringify(opts);
+  if (!sessionEngine) {
+    sessionEngine = createEngine(opts);
+    sessionSig = sig;
+    return sessionEngine;
+  }
+  if (sig !== sessionSig) {
+    // Settings changed. Rebuild on the new dictionary but carry the map, so a
+    // value already tokenized keeps its token instead of getting a second one.
+    const carried = sessionEngine.toJSON();
+    sessionEngine = createEngine(opts);
+    sessionEngine.loadJSON(carried);
+    sessionSig = sig;
+  }
+  return sessionEngine;
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -92,7 +121,8 @@ ipcMain.handle('choose-outdir', async () => {
 });
 
 ipcMain.handle('process-files', async (event, paths, options) => {
-  const result = await processFiles(paths, options, (progress) => {
+  const opts = Object.assign({}, options, { engine: engineFor(options) });
+  const result = await processFiles(paths, opts, (progress) => {
     if (win && !win.isDestroyed()) win.webContents.send('progress', progress);
   });
   return result;
@@ -117,9 +147,8 @@ ipcMain.handle('save-all', async (event, payload, outDir) => {
       written.push(combinedName);
     }
 
-    if (payload.map) {
-      fs.writeFileSync(path.join(outDir, 'redaction-map.json'), JSON.stringify(payload.map, null, 2), 'utf8');
-    }
+    // The map is deliberately not written here. It stays in memory for the
+    // session unless the user saves it with 'save-map'.
     if (payload.reportCsv && payload.includeReport !== false) fs.writeFileSync(path.join(outDir, '_report.csv'), payload.reportCsv, 'utf8');
     if (payload.secretsCsv && payload.secretCount > 0) {
       fs.writeFileSync(path.join(outDir, '_secrets.csv'), payload.secretsCsv, 'utf8');
@@ -164,9 +193,60 @@ ipcMain.handle('dictionary-template', async () => {
 ipcMain.handle('app-version', () => app.getVersion());
 
 ipcMain.handle('restore', async (event, text, map) => {
+  // The live engine already holds this session's map; a passed map is a fallback.
+  if (sessionEngine) return sessionEngine.restore(text);
   const engine = createEngine({});
   if (map) engine.loadJSON(map);
   return engine.restore(text);
+});
+
+ipcMain.handle('tokenize-text', async (event, text, options) => {
+  const body = String(text === null || text === undefined ? '' : text);
+  if (!body.trim()) return { ok: false, error: 'Nothing to de-identify.' };
+  const engine = engineFor(options);
+  const secretsBefore = engine.secrets.length;
+  const clean = engine.redact(body, 'Pasted text');
+  const tally = countTokens(clean);
+  return {
+    ok: true,
+    payload: clean,
+    chars: body.length,
+    tokens: tally.total,
+    secrets: engine.secrets.length - secretsBefore,
+    map: engine.toJSON()
+  };
+});
+
+ipcMain.handle('save-map', async (event, map) => {
+  if (!map || !Array.isArray(map.entries) || !map.entries.length) {
+    return { ok: false, error: 'No map yet - de-identify something first.' };
+  }
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Save the redaction map',
+    defaultPath: 'redaction-map.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(r.filePath, JSON.stringify(map, null, 2), 'utf8');
+    return { ok: true, path: r.filePath, entries: map.entries.length };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('session-info', async () => ({
+  entries: sessionEngine ? sessionEngine.tokenCount : 0,
+  secrets: sessionEngine ? sessionEngine.secrets.length : 0
+}));
+
+ipcMain.handle('forget-session', async () => {
+  // Drops the map and the quarantined-secret log without closing the app.
+  const entries = sessionEngine ? sessionEngine.tokenCount : 0;
+  const secrets = sessionEngine ? sessionEngine.secrets.length : 0;
+  sessionEngine = null;
+  sessionSig = '';
+  return { ok: true, entries, secrets };
 });
 
 ipcMain.handle('open-folder', async (event, dir) => {
