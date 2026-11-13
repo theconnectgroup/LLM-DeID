@@ -276,6 +276,128 @@ async function copyText(text) {
   }
 }
 
+// The map is session state: it never reaches disk unless the user asks.
+function updateMapUi() {
+  const btn = $('btn-save-map');
+  if (!btn) return;
+  const entries = state.map && Array.isArray(state.map.entries) ? state.map.entries.length : 0;
+  btn.hidden = entries === 0;
+  btn.title = entries ? entries + ' entries in this session' : '';
+  const forget = $('btn-forget');
+  if (forget) forget.hidden = entries === 0;
+}
+
+async function runPaste() {
+  const text = $('paste-in').value;
+  if (!text.trim()) { $('paste-status').textContent = 'Nothing pasted.'; return; }
+  const options = {
+    dictionary: parseDictionary($('dict').value),
+    keepList: $('keeplist').value.split(',').map((s) => s.trim()).filter(Boolean),
+    keepPrivateIps: $('keepip').checked
+  };
+  const btn = $('btn-paste-run');
+  btn.disabled = true;
+  $('paste-status').textContent = 'Working\u2026';
+  try {
+    const res = await window.deid.tokenizeText(text, options);
+    if (!res || !res.ok) {
+      $('paste-status').textContent = (res && res.error) || 'Failed.';
+      return;
+    }
+    $('paste-out').textContent = res.payload;
+    $('paste-out').hidden = false;
+    $('btn-paste-copy').hidden = false;
+    state.map = res.map;
+    updateMapUi();
+    const bits = [res.chars.toLocaleString() + ' characters', res.tokens + ' values replaced'];
+    if (res.secrets) bits.push(res.secrets + ' secret' + (res.secrets === 1 ? '' : 's') + ' quarantined');
+    $('paste-status').textContent = bits.join(' \u00b7 ');
+  } catch (err) {
+    $('paste-status').textContent = 'Failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function findTokens(text) {
+  return String(text || '').match(/\[[A-Z]+_\d{2,4}\]/g) || [];
+}
+
+// The re-identify control only makes sense when the box holds tokens.
+function syncPasteMode() {
+  const btn = $('btn-paste-restore');
+  if (!btn) return;
+  btn.hidden = findTokens($('paste-in').value).length === 0;
+}
+
+async function reidentify() {
+  const text = $('paste-in').value;
+  if (!text.trim()) { $('paste-status').textContent = 'Nothing pasted.'; return; }
+  const tokens = findTokens(text);
+  if (!tokens.length) { $('paste-status').textContent = 'No tokens in that text.'; return; }
+
+  const known = new Set();
+  if (state.map && Array.isArray(state.map.entries)) {
+    for (const e of state.map.entries) known.add(e.Token);
+  }
+
+  const btn = $('btn-paste-restore');
+  btn.disabled = true;
+  try {
+    const out = await window.deid.restore(text, state.map);
+    $('paste-out').textContent = out;
+    $('paste-out').hidden = false;
+    $('btn-paste-copy').hidden = false;
+
+    const replaced = tokens.filter((t) => known.has(t)).length;
+    const missing = tokens.length - replaced;
+    if (!replaced) {
+      $('paste-status').textContent = 'None of those tokens are in this session\u2019s map.';
+      return;
+    }
+    let msg = replaced + ' token' + (replaced === 1 ? '' : 's') + ' replaced';
+    if (missing) msg += ', ' + missing + ' left as ' + (missing === 1 ? 'it was' : 'they were') + ' (not in this session)';
+    $('paste-status').textContent = msg;
+  } catch (err) {
+    $('paste-status').textContent = 'Failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveMap() {
+  const res = await window.deid.saveMap(state.map);
+  if (res && res.ok) {
+    setStatus('Map saved to ' + res.path + ' (' + res.entries + ' entries)');
+  } else if (res && !res.canceled) {
+    setStatus('Map not saved: ' + ((res && res.error) || 'unknown error'));
+  }
+}
+
+async function forgetSession() {
+  const entries = state.map && Array.isArray(state.map.entries) ? state.map.entries.length : 0;
+  if (entries) {
+    const msg = 'Drop the ' + entries + ' token' + (entries === 1 ? '' : 's') + ' held in memory?\n\n' +
+      'The pasted text and the de-identified output are cleared as well, so neither can be restored.';
+    if (!window.confirm(msg)) return;
+  }
+  const res = await window.deid.forgetSession();
+  state.map = null;
+  // state.result keeps its payloads; its copy of the map goes with everything else.
+  if (state.result) state.result.map = null;
+  $('paste-in').value = '';
+  $('paste-out').textContent = '';
+  $('paste-out').hidden = true;
+  $('btn-paste-copy').hidden = true;
+  $('paste-status').textContent = '';
+  $('restore-out').value = '';
+  $('restore-out').hidden = true;
+  $('btn-copy-restored').hidden = true;
+  syncPasteMode();
+  updateMapUi();
+  setStatus(res && res.ok ? 'Session cleared. Nothing is held in memory.' : 'Could not clear the session.');
+}
+
 async function run() {
   if (!state.files.length) return;
   const options = {
@@ -294,6 +416,7 @@ async function run() {
     const result = await window.deid.process(state.files.map((f) => f.path), options);
     state.result = result;
     state.map = result.map;
+    updateMapUi();
     renderResults();
   } catch (err) {
     setStatus('Failed: ' + err.message);
@@ -322,6 +445,10 @@ async function saveAll() {
     names.className = 'path';
     names.textContent = res.written.join(', ');
     note.append(line, names);
+    const hint = document.createElement('div');
+    hint.className = 'muted';
+    hint.textContent = 'The map was not written. It stays in this window until you close the app \u2014 use Save map if you need to restore an answer later.';
+    note.appendChild(hint);
     setStatus('Saved to ' + res.dir);
     window.deid.openFolder(res.dir);
   } else {
@@ -380,7 +507,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btn-run').addEventListener('click', run);
   $('btn-save').addEventListener('click', saveAll);
+  $('btn-save-map').addEventListener('click', saveMap);
+  $('btn-forget').addEventListener('click', forgetSession);
   $('btn-copy-all').addEventListener('click', copyAll);
+  $('btn-paste-run').addEventListener('click', runPaste);
+  $('btn-paste-restore').addEventListener('click', reidentify);
+  $('paste-in').addEventListener('input', syncPasteMode);
+  $('btn-paste-copy').addEventListener('click', async () => {
+    const ok = await copyText($('paste-out').textContent);
+    $('paste-status').textContent = ok ? 'Copied.' : 'Copy failed.';
+  });
   $('opt-format').addEventListener('change', syncFormatUi);
   $('btn-dict-csv').addEventListener('click', loadDictionaryCsv);
   $('btn-dict-template').addEventListener('click', saveDictionaryTemplate);
@@ -392,6 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(() => {});
   }
   syncFormatUi();
+  updateMapUi();
   $('btn-restore').addEventListener('click', restore);
   $('btn-copy-restored').addEventListener('click', async () => {
     await copyText($('restore-out').value);

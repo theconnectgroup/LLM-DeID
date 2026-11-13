@@ -40,9 +40,13 @@ npm install --save @kenjiuno/msgreader pdfjs-dist xlsx word-extractor
 Add files or a folder, paste a name dictionary if you have one, press
 **De-identify**.
 
-Every file gets a completeness tag, a token count and a **Copy payload** button.
-**Save to folder…** writes the payloads, the map and two reports into a folder you
-pick.
+Every file gets a completeness tag, a token count and a **Copy** button.
+**Save to folder…** writes the payloads and the two reports into a folder you
+pick. The map is not written; press **Save map…** if you want to keep it.
+
+For a chunk you already have in front of you, paste it into the **Paste text**
+panel and press **De-identify** there. Nothing is written to disk, and the
+de-identified text stays on that panel until you copy it.
 
 Read `_secrets.csv` before anything leaves the machine. It records the rule, the
 line and the length of anything that looked like a credential, never the value.
@@ -132,12 +136,18 @@ host,PC-NAME-01
 
 ## The map
 
-`redaction-map.json` holds the token-to-value pairs. It is written only when you
-press **Save to folder…**, into the folder you choose. Keep one per client; never
-merge them.
+`redaction-map.json` holds the token-to-value pairs. It is not written to disk
+unless you press **Save map…** in the Results header, so nothing lands in your
+folders by accident. Keep one per client; never merge them.
 
-The Restore panel uses the in-session map, so you can paste an answer back without
-saving anything to disk.
+The map lives in memory for as long as the app is open. That is what lets Restore
+work without saving anything, and what keeps a pasted chunk using the same tokens
+as the files you processed before it. Closing the app discards it unless you saved
+a copy.
+
+**Clear session** in the header drops the map and the quarantined-secret log there
+and then, without a restart. That is the control for moving from one client to the
+next.
 
 ## Themes
 

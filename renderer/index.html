@@ -21,6 +21,7 @@
         <option value="daylight">Daylight</option>
       </select>
     </label>
+    <button type="button" id="btn-forget" class="ghost" hidden title="Drops the token map and the quarantined-secret log held in memory. De-identified text on screen stays.">Clear session</button>
     <span class="ver" id="app-version"></span>
     <div class="badge" id="engine-badge">ready</div>
   </div>
@@ -51,6 +52,22 @@
           <button type="button" id="btn-clear" class="ghost">Clear</button>
         </div>
         <ul id="file-list" class="file-list"></ul>
+      </section>
+
+      <section class="panel" id="paste-panel">
+        <div class="panel-head">
+          <h2>Paste text<span class="tip" tabindex="0" role="note">i<span class="bubble">For a chunk you already have in front of you &mdash; an email, a log entry, a ticket. Nothing is written to disk: the de-identified text stays on this panel and the map stays in memory until you close the app. Paste an answer containing tokens and Re-identify appears, swapping them back from the same map.</span></span></h2>
+        </div>
+        <label class="field">
+          <textarea id="paste-in" rows="6" spellcheck="false" placeholder="Paste the text to de-identify"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" id="btn-paste-run" class="secondary">De-identify</button>
+          <button type="button" id="btn-paste-restore" class="secondary" hidden title="Swaps tokens such as [NAME_01] back to the real values from this session's map.">Re-identify</button>
+          <button type="button" id="btn-paste-copy" class="ghost" hidden>Copy</button>
+          <span id="paste-status" class="muted"></span>
+        </div>
+        <pre id="paste-out" class="preview" hidden></pre>
       </section>
     </div>
 
@@ -98,11 +115,12 @@
   <section class="panel" id="results-panel" hidden>
     <div class="panel-head">
       <div>
-        <h2>Results<span class="tip" tabindex="0" role="note">i<span class="bubble">One copy per input, in the format you picked, named after the source file. redaction-map.json is written beside it so Restore works. Filenames keep the input name unredacted &mdash; if that name identifies the client, rename the file before uploading, or use Copy, which sends only the de-identified text.</span></span></h2>
+        <h2>Results<span class="tip" tabindex="0" role="note">i<span class="bubble">One copy per input, in the format you picked, named after the source file. The map stays in memory so Restore works, and reaches disk only if you press Save map. Filenames keep the input name unredacted &mdash; if that name identifies the client, rename the file before uploading, or use Copy, which sends only the de-identified text.</span></span></h2>
       </div>
       <div class="row" style="margin-top:0">
         <button type="button" id="btn-copy-all" class="secondary" hidden>Copy all</button>
         <button type="button" id="btn-save" class="secondary">Save to folder&hellip;</button>
+        <button type="button" id="btn-save-map" class="ghost" hidden>Save map&hellip;</button>
       </div>
     </div>
     <div class="save-note" id="save-note" hidden></div>
